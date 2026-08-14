@@ -1,7 +1,16 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { listModels } from './ollama.js'
 import { generateSlides } from './slides.js'
-import { exportPptx } from './pptx.js'
+import { exportPptx, exportSetlistPptx } from './pptx.js'
+import {
+  getCachedSong,
+  saveCachedSong,
+  listCachedSongs,
+  deleteCachedSong
+} from './db.js'
+import type { CachedSong } from './db.js'
+import { saveSetlist, listSetlists, deleteSetlist } from './setlistDb.js'
+import type { SetlistSongEntry } from './setlistDb.js'
 
 export function registerIpc(): void {
   ipcMain.handle('ollama:list-models', async () => {
@@ -23,6 +32,10 @@ export function registerIpc(): void {
     return exportPptx(payload)
   })
 
+  ipcMain.handle('pptx:export-setlist', async (_evt, payload) => {
+    return exportSetlistPptx(payload)
+  })
+
   ipcMain.handle('dialog:save', async (_evt, defaultName: string) => {
     const win = BrowserWindow.getFocusedWindow()
     const result = await dialog.showSaveDialog(win!, {
@@ -31,5 +44,42 @@ export function registerIpc(): void {
       filters: [{ name: 'PowerPoint', extensions: ['pptx'] }]
     })
     return { path: result.canceled ? null : result.filePath || null }
+  })
+
+  // Banco local
+  ipcMain.handle('db:get', async (_evt, args: { song: string; author: string; language: string }) => {
+    return getCachedSong(args.song, args.author, args.language)
+  })
+
+  ipcMain.handle('db:save', async (_evt, entry: CachedSong) => {
+    saveCachedSong(entry)
+    return { ok: true }
+  })
+
+  ipcMain.handle('db:list', async () => {
+    return listCachedSongs()
+  })
+
+  ipcMain.handle('db:delete', async (_evt, args: { song: string; author: string; language: string }) => {
+    deleteCachedSong(args.song, args.author, args.language)
+    return { ok: true }
+  })
+
+  // Histórico de setlists
+  ipcMain.handle('setlist:save', async (_evt, args: {
+    eventTitle: string
+    songs: { song: string; author: string; lyricsHint?: string }[]
+    results: SetlistSongEntry[]
+  }) => {
+    return saveSetlist(args.eventTitle, args.songs, args.results)
+  })
+
+  ipcMain.handle('setlist:list', async () => {
+    return listSetlists()
+  })
+
+  ipcMain.handle('setlist:delete', async (_evt, id: string) => {
+    deleteSetlist(id)
+    return { ok: true }
   })
 }

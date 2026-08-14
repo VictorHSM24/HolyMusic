@@ -18,15 +18,18 @@ export type GenerateSlidesPayload = {
   model: string
   tryWeb: boolean
   manualLyrics?: string
+  useCache?: boolean
+  lyricsHint?: string
 }
 
 export type GenerateSlidesResult = {
   slides: Slide[]
-  lyricsSource: 'letras.mus.br' | 'llm' | 'manual'
+  lyricsSource: 'letras.mus.br' | 'llm' | 'manual' | 'cache'
   lyricsRaw: string
   song: string
   author: string
   warning?: string
+  fromCache: boolean
 }
 
 export type ExportPptxPayload = {
@@ -37,11 +40,89 @@ export type ExportPptxPayload = {
   outputPath: string
 }
 
+export type SetlistEntry = {
+  song: string
+  author: string
+  slides: Slide[]
+}
+
+export type SetlistExportPayload = {
+  entries: SetlistEntry[]
+  theme: SlideTheme
+  outputPath: string
+  eventTitle?: string
+}
+
+export type CachedSong = {
+  song: string
+  author: string
+  language: string
+  lyrics: string
+  slides: Slide[]
+  source: 'letras.mus.br' | 'llm' | 'manual'
+  approved: boolean
+  updatedAt: string
+}
+
+export type SetlistSongEntry = {
+  song: string
+  author: string
+  slides: Slide[]
+  source: string
+  error?: string
+}
+
+export type SavedSetlist = {
+  id: string
+  eventTitle: string
+  songs: { song: string; author: string; lyricsHint?: string }[]
+  results: SetlistSongEntry[]
+  createdAt: string
+}
+
+export type DisplayInfo = {
+  id: number
+  label: string
+  width: number
+  height: number
+  isPrimary: boolean
+}
+
+export type ProjectionUpdate = {
+  lines: string[]
+  footer: string
+  background: string
+  textColor: string
+  footerColor: string
+  fontSize: number
+  footerFontSize: number
+}
+
 type HolyApi = {
   listOllamaModels: () => Promise<string[]>
   generateSlides: (p: GenerateSlidesPayload) => Promise<GenerateSlidesResult>
   exportPptx: (p: ExportPptxPayload) => Promise<{ path: string }>
+  exportSetlistPptx: (p: SetlistExportPayload) => Promise<{ path: string }>
   showSaveDialog: (defaultName: string) => Promise<{ path: string | null }>
+  getCachedSong: (song: string, author: string, language: string) => Promise<CachedSong | null>
+  saveCachedSong: (entry: CachedSong) => Promise<{ ok: boolean }>
+  listCachedSongs: () => Promise<CachedSong[]>
+  deleteCachedSong: (song: string, author: string, language: string) => Promise<{ ok: boolean }>
+  saveSetlist: (eventTitle: string, songs: { song: string; author: string; lyricsHint?: string }[], results: SetlistSongEntry[]) => Promise<SavedSetlist>
+  listSetlists: () => Promise<SavedSetlist[]>
+  deleteSetlist: (id: string) => Promise<{ ok: boolean }>
+  projection: {
+    listDisplays: () => Promise<DisplayInfo[]>
+    start: (displayId: number) => Promise<{ ok: boolean }>
+    stop: () => Promise<{ ok: boolean }>
+    update: (data: ProjectionUpdate) => Promise<void>
+    blank: (blank: boolean) => Promise<void>
+    onClosed: (callback: () => void) => () => void
+  }
+  projector: {
+    onUpdate: (callback: (event: unknown, data: ProjectionUpdate & { blank: boolean }) => void) => void
+    ready: () => void
+  }
 }
 
 declare global {

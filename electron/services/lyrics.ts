@@ -2,7 +2,9 @@
 // Estratégia em camadas (sem depender de buscador externo):
 // 1. Tenta a URL direta com slug: /{artist-slug}/{song-slug}/
 // 2. Se falhar, busca na página do artista e procura a música nos links
-// 3. Se falhar, tenta DuckDuckGo (fallback, às vezes bloqueia com CAPTCHA)
+// 3. Se falhar, tenta variantes de ortografia do autor (K<->C, Y<->I, W<->V)
+// 4. Se falhar, busca só por título da música (ignorando autor) + valida com lyricsHint
+// 5. Se falhar, tenta DuckDuckGo (fallback, às vezes bloqueia com CAPTCHA)
 
 export type FetchResult = {
   found: boolean
@@ -37,7 +39,61 @@ function slugVariants(s: string): string[] {
   // Versão sem o primeiro artigo também (ex: "A igreja vem" → "igreja-vem")
   const withoutLeading = base.replace(/^(a|o|e|as|os|de|da|do|das|dos)-/, '')
   if (withoutLeading !== base) variants.push(withoutLeading)
+  // Remove colaborações: "Heloisa Rosa e Fernandinho" → "heloisa-rosa"
+  const collabMatch = s.match(/^(.+?)\s+e\s+\S+/i)
+  if (collabMatch) {
+    const solo = slugify(collabMatch[1])
+    if (solo !== base) variants.push(solo)
+  }
   return [...new Set(variants)]
+}
+
+// Gera variações de ortografia comuns em nomes brasileiros:
+// K <-> C (Lukas / Lucas), Y <-> I (Lony / Loni), W <-> V (Wagner / Vagner)
+function orthographicVariants(s: string): string[] {
+  const variants = new Set<string>([s])
+  // K <-> C
+  if (/k/i.test(s)) variants.add(s.replace(/k/gi, (m) => (m === 'K' ? 'C' : 'c')))
+  if (/c/i.test(s)) {
+    // só troca C por K antes de vogais que fazem sentido (ca->ka, co->ko, cu->ku)
+    // mas não ce->ke nem ci->ki (som diferente)
+    variants.add(s.replace(/c([aou])/gi, (_m, v) => 'k' + v))
+  }
+  // Y <-> I
+  if (/y/i.test(s)) variants.add(s.replace(/y/gi, (m) => (m === 'Y' ? 'I' : 'i')))
+  if (/i/i.test(s)) variants.add(s.replace(/i/gi, (m) => (m === 'I' ? 'Y' : 'y')))
+  // W <-> V (no início ou depois de consoante)
+  if (/w/i.test(s)) variants.add(s.replace(/w/gi, (m) => (m === 'W' ? 'V' : 'v')))
+  if (/v/i.test(s)) variants.add(s.replace(/v/gi, (m) => (m === 'V' ? 'W' : 'w')))
+  // PH -> F (Phil -> Fil)
+  if (/ph/i.test(s)) variants.add(s.replace(/ph/gi, (m) => (m === 'PH' ? 'F' : 'f')))
+  return [...variants]
+}
+
+// Aliases conhecidos de artistas gospel brasileiros
+// (nome comum / abreviação -> nome canônico no letras.mus.br)
+const ARTIST_ALIASES: Record<string, string> = {
+  'fhop': 'Florianópolis House Of Prayer',
+  'fhop music': 'Florianópolis House Of Prayer',
+  'fhopping': 'Florianópolis House Of Prayer',
+  'diante do trono': 'Ana Paula Valadão',
+  'dtt': 'Diante do Trono',
+  'trazendo arca': 'Trazendo a Arca',
+  'ministerio avivah': 'Avivah',
+  'avivah': 'Avivah',
+  'a igreja music': 'A Igreja Music',
+  'igreja music': 'A Igreja Music'
+}
+
+function resolveAlias(author: string): string[] {
+  const lower = author.toLowerCase().trim()
+  const aliases = [author]
+  for (const [key, val] of Object.entries(ARTIST_ALIASES)) {
+    if (lower === key || slugify(lower) === slugify(key)) {
+      aliases.push(val)
+    }
+  }
+  return [...new Set(aliases)]
 }
 
 function extractLyrics(html: string): string | null {
@@ -233,20 +289,116 @@ function levenshtein(a: string, b: string): number {
   return dp[m][n]
 }
 
+// Estratégia 4: Busca só por título da música (ignora autor)
+// Usa a busca interna do letras.mus.br e valida o resultado com lyricsHint se disponível
+async function trySearchByTitleOnly(song: string, lyricsHint?: string): Promise<FetchResult> {
+  const query = encodeURIComponent(song)
+  const searchUrl = `https://www.letras.mus.br/busca/?q=${query}`
+  try {
+    const html = await fetchPage(searchUrl)
+    if (!html) return { found: false, lyrics: null, url: '' }
+
+    // Extrai links de músicas da página de busca
+    const linkPattern = /href="(https?:\/\/(?:www\.)?letras\.mus\.br\/([a-z0-9-]+)\/([a-z0-9-]+)\/?)"/gi
+    const matches = [...html.matchAll(linkPattern)]
+    const exclude = ['discografia', 'mais-acessadas', 'busca', 'search', 'contribuicoes', 'letra', 'ouvir', 'print', 'significado', 'radio']
+
+    const candidates = matches
+      .map((m) => ({ url: m[1], artistSlug: m[2], songSlug: m[3] }))
+      .filter((l) => !exclude.some((e) => l.songSlug.includes(e) || l.artistSlug.includes(e)))
+      .filter((l, i, arr) => arr.findIndex((x) => x.url === l.url) === i) // dedupe
+
+    const songSlugs = slugVariants(song)
+    const songLower = song.toLowerCase().trim()
+
+    // Prioriza matches por slug da música
+    const sorted = candidates.sort((a, b) => {
+      const aMatch = songSlugs.includes(a.songSlug) ? 0 : 1
+      const bMatch = songSlugs.includes(b.songSlug) ? 0 : 1
+      return aMatch - bMatch
+    })
+
+    // Tenta os primeiros candidatos
+    for (const cand of sorted.slice(0, 5)) {
+      const songHtml = await fetchPage(cand.url)
+      if (!songHtml) continue
+      const lyrics = extractLyrics(songHtml)
+      if (!lyrics) continue
+
+      // Se temos um lyricsHint, valida se o trecho aparece na letra
+      if (lyricsHint) {
+        const hintNormalized = lyricsHint
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\.{2,}/g, '')
+          .trim()
+        const lyricsNormalized = lyrics
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9\s]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+        // Remove espaços e pontuação do hint para busca flexível
+        const hintWords = hintNormalized.split(/\s+/).filter((w) => w.length > 2)
+        if (hintWords.length >= 2) {
+          const matchCount = hintWords.filter((w) => lyricsNormalized.includes(w)).length
+          const matchRatio = matchCount / hintWords.length
+          if (matchRatio < 0.4) {
+            // Trecho não bate — provavelmente não é a música certa
+            continue
+          }
+        }
+      }
+
+      return { found: true, lyrics, url: cand.url }
+    }
+
+    return { found: false, lyrics: null, url: '' }
+  } catch {
+    return { found: false, lyrics: null, url: '' }
+  }
+}
+
 export async function fetchLyrics(
   author: string,
   song: string,
-  _language: string
+  _language: string,
+  lyricsHint?: string
 ): Promise<FetchResult> {
-  // 1) URL direta
-  let result = await tryDirectUrl(author, song)
+  // Resolve aliases (ex: "fhop" -> "Florianópolis House Of Prayer")
+  const authorCandidates = resolveAlias(author)
+
+  // 1) URL direta (tenta todas as variações de autor + alias)
+  for (const a of authorCandidates) {
+    let result = await tryDirectUrl(a, song)
+    if (result.found) return result
+  }
+
+  // 2) Página do artista (tenta todas as variações de autor + alias)
+  for (const a of authorCandidates) {
+    let result = await tryArtistPage(a, song)
+    if (result.found) return result
+  }
+
+  // 3) Variantes de ortografia (K<->C, Y<->I, W<->V, PH<->F)
+  for (const a of authorCandidates) {
+    const orthoVariants = orthographicVariants(a)
+    for (const v of orthoVariants) {
+      if (v === a) continue
+      let result = await tryDirectUrl(v, song)
+      if (result.found) return result
+      result = await tryArtistPage(v, song)
+      if (result.found) return result
+    }
+  }
+
+  // 4) Busca só por título (ignora autor), valida com lyricsHint
+  let result = await trySearchByTitleOnly(song, lyricsHint)
   if (result.found) return result
 
-  // 2) Página do artista
-  result = await tryArtistPage(author, song)
-  if (result.found) return result
-
-  // 3) DuckDuckGo (fallback)
+  // 5) DuckDuckGo (fallback, pode bloquear com CAPTCHA)
   result = await tryDuckDuckGo(song, author)
   if (result.found) return result
 

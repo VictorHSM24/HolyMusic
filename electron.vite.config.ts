@@ -25,7 +25,10 @@ export default defineConfig({
     root: 'src',
     build: {
       rollupOptions: {
-        input: { index: resolve(__dirname, 'src/index.html') }
+        input: {
+          index: resolve(__dirname, 'src/index.html'),
+          projector: resolve(__dirname, 'src/projector.html')
+        }
       }
     },
     plugins: [react()]

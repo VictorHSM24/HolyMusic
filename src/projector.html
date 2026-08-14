@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HolyMusic Projector</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000;
+      font-family: 'Calibri', 'Segoe UI', sans-serif;
+    }
+    #slide {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      transition: opacity 0.3s ease;
+    }
+    #slide .body {
+      width: 90%;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.3;
+      white-space: pre-wrap;
+    }
+    #slide .footer {
+      position: absolute;
+      bottom: 2vh;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-style: italic;
+    }
+    #slide.blank {
+      opacity: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="slide">
+    <div class="body" id="body"></div>
+    <div class="footer" id="footer"></div>
+  </div>
+  <script type="module" src="/projector-main.ts"></script>
+</body>
+</html>

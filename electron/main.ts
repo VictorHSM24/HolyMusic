@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { registerIpc } from './services/ipc.js'
+import { registerProjectionIpc } from './projector.js'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -35,6 +36,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   registerIpc()
+  registerProjectionIpc()
   createWindow()
 
   app.on('activate', () => {

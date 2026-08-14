@@ -1,5 +1,6 @@
 import { chatJson, chatText } from './ollama.js'
 import { fetchLyrics } from './lyrics.js'
+import { getCachedSong, saveCachedSong } from './db.js'
 
 export type Slide = { lines: string[] }
 
@@ -11,15 +12,20 @@ export type GenerateParams = {
   tryWeb: boolean
   /** Letra colada manualmente pelo usuário (opcional). Se presente, pula busca web e LLM. */
   manualLyrics?: string
+  /** Se true, usa cache do banco se disponível (aprovado). Padrão: true. */
+  useCache?: boolean
+  /** Trecho da letra fornecido pelo usuário para ajudar a identificar a música (opcional). */
+  lyricsHint?: string
 }
 
 export type GenerateResult = {
   slides: Slide[]
-  lyricsSource: 'letras.mus.br' | 'llm' | 'manual'
+  lyricsSource: 'letras.mus.br' | 'llm' | 'manual' | 'cache'
   lyricsRaw: string
   song: string
   author: string
   warning?: string
+  fromCache: boolean
 }
 
 const STRUCTURE_SYSTEM = `Você é um assistente que organiza letras de música em slides para projeção em igreja.
@@ -72,20 +78,37 @@ function safeParseJson(content: string): unknown {
 }
 
 export async function generateSlides(params: GenerateParams): Promise<GenerateResult> {
-  const { song, author, language, model, tryWeb, manualLyrics } = params
+  const { song, author, language, model, tryWeb, manualLyrics, useCache = true, lyricsHint } = params
   let lyricsRaw = ''
   let source: GenerateResult['lyricsSource'] = 'llm'
   const warnings: string[] = []
+  let fromCache = false
 
-  // 0) Letra manual — usuário colou a letra diretamente
+  // 0) Banco local — se já temos a letra aprovada em cache, usa direto
+  if (useCache && !manualLyrics) {
+    const cached = getCachedSong(song, author, language)
+    if (cached && cached.approved && cached.slides.length > 0) {
+      return {
+        slides: cached.slides,
+        lyricsSource: 'cache',
+        lyricsRaw: cached.lyrics,
+        song,
+        author,
+        warning: undefined,
+        fromCache: true
+      }
+    }
+  }
+
+  // 0b) Letra manual — usuário colou a letra diretamente
   if (manualLyrics && manualLyrics.trim().length > 10) {
     lyricsRaw = cleanLyrics(manualLyrics)
     source = 'manual'
   }
 
-  // 1) Tenta buscar no letras.mus.br (via DuckDuckGo para encontrar a URL real)
+  // 1) Tenta buscar no letras.mus.br
   if (!lyricsRaw && tryWeb) {
-    const fetched = await fetchLyrics(author, song, language)
+    const fetched = await fetchLyrics(author, song, language, lyricsHint)
     if (fetched.found && fetched.lyrics) {
       lyricsRaw = cleanLyrics(fetched.lyrics)
       source = 'letras.mus.br'
@@ -100,13 +123,18 @@ export async function generateSlides(params: GenerateParams): Promise<GenerateRe
     }
   }
 
-  // 2) Fallback: pede a letra ao LLM — mas SÓ se o usuário não forneceu letra manual
+  // 2) Fallback: pede a letra ao LLM — usa lyricsHint como contexto extra
   if (!lyricsRaw) {
     const langName = language === 'pt-BR' ? 'português brasileiro' : language
+    let prompt = `Música: "${song}"\nAutor/Artista: "${author}"\nIdioma: ${langName}`
+    if (lyricsHint) {
+      prompt += `\nTrecho conhecido: "${lyricsHint}"`
+    }
+    prompt += `\n\nVocê conhece a letra EXATA e COMPLETA desta música? Se houver QUALQUER dúvida, responda NAO_ENCONTRADA. Caso contrário, devolva apenas a letra.`
     const lyricsResp = await chatText(
       model,
       GENERATE_LYRICS_SYSTEM,
-      `Música: "${song}"\nAutor/Artista: "${author}"\nIdioma: ${langName}\n\nVocê conhece a letra EXATA e COMPLETA desta música? Se houver QUALQUER dúvida, responda NAO_ENCONTRADA. Caso contrário, devolva apenas a letra.`
+      prompt
     )
     const cleaned = cleanLyrics(lyricsResp)
     if (!cleaned || /NAO_ENCONTRADA/i.test(cleaned)) {
@@ -137,7 +165,11 @@ export async function generateSlides(params: GenerateParams): Promise<GenerateRe
       .map((s) => ({ lines: (s.lines || []).map((l) => l.trim()).filter(Boolean) }))
       .filter((s) => s.lines.length > 0)
   } catch {
-    // Fallback: divide manualmente em grupos de 4 linhas
+    // JSON inválido — fallback abaixo
+  }
+
+  // Fallback: se o LLM retornou slides vazios OU o JSON falhou, divide manualmente
+  if (slides.length === 0) {
     const lines = lyricsRaw.split('\n').map((l) => l.trim()).filter((l) => l.length > 0)
     for (let i = 0; i < lines.length; i += 4) {
       slides.push({ lines: lines.slice(i, i + 4) })
@@ -148,12 +180,31 @@ export async function generateSlides(params: GenerateParams): Promise<GenerateRe
     throw new Error('O modelo não conseguiu estruturar a letra em slides. Tente editar manualmente.')
   }
 
+  // Salva no banco local para reuso futuro (não aprovado ainda — o usuário precisa revisar)
+  if (source !== 'manual' || true) {
+    try {
+      saveCachedSong({
+        song,
+        author,
+        language,
+        lyrics: lyricsRaw,
+        slides,
+        source,
+        approved: source === 'letras.mus.br', // aprova automaticamente se veio da web
+        updatedAt: new Date().toISOString()
+      })
+    } catch {
+      // erro ao salvar cache não é crítico
+    }
+  }
+
   return {
     slides,
     lyricsSource: source,
     lyricsRaw,
     song,
     author,
-    warning: warnings.join(' ') || undefined
+    warning: warnings.join(' ') || undefined,
+    fromCache
   }
 }
