@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { registerIpc } from './services/ipc.js'
 import { registerProjectionIpc } from './projector.js'
+import { setupAutoUpdater } from './updater.js'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -19,6 +20,9 @@ function createWindow(): void {
       nodeIntegration: false
     }
   })
+
+  // Configura auto-updater (só funciona em produção)
+  setupAutoUpdater(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()

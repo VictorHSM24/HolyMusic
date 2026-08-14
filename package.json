@@ -1,6 +1,6 @@
 {
   "name": "holymusic",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Gerador de slides PPTX de letras de músicas com IA local (Ollama) para igreja",
   "author": "HolyMusic",
   "main": "./out/main/index.js",
@@ -26,6 +26,7 @@
     "cross-env": "^10.1.0",
     "electron": "^31.7.7",
     "electron-builder": "^24.13.3",
+    "electron-updater": "^6.8.9",
     "electron-vite": "^2.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

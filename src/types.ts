@@ -123,6 +123,22 @@ type HolyApi = {
     onUpdate: (callback: (event: unknown, data: ProjectionUpdate & { blank: boolean }) => void) => void
     ready: () => void
   }
+  updater: {
+    check: () => Promise<{ ok: boolean; error?: string }>
+    install: () => Promise<{ ok: boolean }>
+    getVersion: () => Promise<{ version: string }>
+    onStatus: (callback: (event: unknown, data: UpdaterStatus) => void) => void
+  }
+}
+
+export type UpdaterStatus = {
+  status: 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+  version?: string
+  releaseNotes?: string | null
+  percent?: number
+  transferred?: number
+  total?: number
+  message?: string
 }
 
 declare global {

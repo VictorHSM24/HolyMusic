@@ -6,6 +6,10 @@ directories:
   buildResources: build
 files:
   - out/**/*
+publish:
+  provider: github
+  owner: VictorHSM24
+  repo: HolyMusic
 win:
   signAndEditExecutable: false
   target:

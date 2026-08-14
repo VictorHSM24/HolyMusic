@@ -50,6 +50,16 @@ const api = {
       ipcRenderer.on('projector:update', callback as never)
     },
     ready: () => ipcRenderer.send('projector:ready')
+  },
+
+  // Auto-updater
+  updater: {
+    check: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('updater:check'),
+    install: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('updater:install'),
+    getVersion: (): Promise<{ version: string }> => ipcRenderer.invoke('updater:version'),
+    onStatus: (callback: (event: unknown, data: UpdaterStatus) => void) => {
+      ipcRenderer.on('updater:status', callback as never)
+    }
   }
 }
 
@@ -156,6 +166,16 @@ export type ProjectionUpdate = {
 
 export type ProjectorData = ProjectionUpdate & {
   blank: boolean
+}
+
+export type UpdaterStatus = {
+  status: 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+  version?: string
+  releaseNotes?: string | null
+  percent?: number
+  transferred?: number
+  total?: number
+  message?: string
 }
 
 contextBridge.exposeInMainWorld('holy', api)

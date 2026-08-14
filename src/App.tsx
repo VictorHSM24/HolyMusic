@@ -7,6 +7,7 @@ import SetlistResults from './components/SetlistResults'
 import DatabasePanel from './components/DatabasePanel'
 import SetlistHistory from './components/SetlistHistory'
 import ProjectionPanel from './components/ProjectionPanel'
+import UpdateNotifier from './components/UpdateNotifier'
 import type { Slide, SlideTheme, GenerateSlidesResult, SetlistEntry, CachedSong, SavedSetlist, SetlistSongEntry } from './types'
 
 const DEFAULT_THEME: SlideTheme = {
@@ -350,6 +351,7 @@ export default function App() {
             {setlistResults.filter((r) => !r.error).length}/{setlistResults.length} músicas
           </div>
         )}
+        <UpdateNotifier />
         <button className="ghost" onClick={() => setShowDb(true)} title="Ver músicas salvas">
           🎵 Banco
         </button>
