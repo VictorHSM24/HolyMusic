@@ -23,6 +23,9 @@ const api = {
   listCachedSongs: (): Promise<CachedSong[]> => ipcRenderer.invoke('db:list'),
   deleteCachedSong: (song: string, author: string, language: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('db:delete', { song, author, language }),
+  exportAllSongs: (): Promise<CachedSong[]> => ipcRenderer.invoke('db:export'),
+  importSongs: (songs: CachedSong[], overwrite: boolean): Promise<{ added: number; updated: number; skipped: number }> =>
+    ipcRenderer.invoke('db:import', { songs, overwrite }),
 
   // Histórico de setlists
   saveSetlist: (eventTitle: string, songs: { song: string; author: string; lyricsHint?: string }[], results: SetlistSongEntry[]): Promise<SavedSetlist> =>

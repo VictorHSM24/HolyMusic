@@ -213,6 +213,41 @@ export default function App() {
         i === index ? { ...sr, result: { ...sr.result, slides: newSlides } } : sr
       )
     )
+    // Salva a edição no banco automaticamente
+    const sr = setlistResults[index]
+    if (sr && !sr.error) {
+      const r = sr.result
+      window.holy.saveCachedSong({
+        song: r.song,
+        author: r.author,
+        language: 'pt-BR',
+        lyrics: r.lyricsRaw || '',
+        slides: newSlides,
+        source: r.lyricsSource,
+        approved: true, // edição manual aprova automaticamente
+        updatedAt: new Date().toISOString()
+      }).catch(() => {})
+    }
+  }
+
+  // Salva os slides editados no banco (modo música única)
+  const handleSaveSlidesToCache = async () => {
+    if (!slides.length || !song) return
+    try {
+      await window.holy.saveCachedSong({
+        song,
+        author,
+        language: 'pt-BR',
+        lyrics: '',
+        slides,
+        source: source.includes('banco') ? 'letras.mus.br' : (source as 'letras.mus.br' | 'llm' | 'manual'),
+        approved: true,
+        updatedAt: new Date().toISOString()
+      })
+      setBanner({ kind: 'ok', msg: `Slides salvos no banco: ${song} — ${author}` })
+    } catch {
+      setBanner({ kind: 'error', msg: 'Erro ao salvar slides no banco.' })
+    }
   }
 
   const handleExportSetlist = async () => {
@@ -364,13 +399,23 @@ export default function App() {
           </button>
         )}
         {mode === 'single' ? (
-          <button
-            className="primary"
-            onClick={handleExportSingle}
-            disabled={!slides.length || exporting || !song}
-          >
-            {exporting ? <><span className="spinner" /> Exportando…</> : '⬇ Exportar PPTX'}
-          </button>
+          <>
+            <button
+              className="ghost"
+              onClick={handleSaveSlidesToCache}
+              disabled={!slides.length || !song}
+              title="Salvar slides editados no banco local"
+            >
+              💾 Salvar
+            </button>
+            <button
+              className="primary"
+              onClick={handleExportSingle}
+              disabled={!slides.length || exporting || !song}
+            >
+              {exporting ? <><span className="spinner" /> Exportando…</> : '⬇ Exportar PPTX'}
+            </button>
+          </>
         ) : (
           <button
             className="primary"

@@ -6,7 +6,9 @@ import {
   getCachedSong,
   saveCachedSong,
   listCachedSongs,
-  deleteCachedSong
+  deleteCachedSong,
+  exportAllSongs,
+  importSongs
 } from './db.js'
 import type { CachedSong } from './db.js'
 import { saveSetlist, listSetlists, deleteSetlist } from './setlistDb.js'
@@ -63,6 +65,14 @@ export function registerIpc(): void {
   ipcMain.handle('db:delete', async (_evt, args: { song: string; author: string; language: string }) => {
     deleteCachedSong(args.song, args.author, args.language)
     return { ok: true }
+  })
+
+  ipcMain.handle('db:export', async () => {
+    return exportAllSongs()
+  })
+
+  ipcMain.handle('db:import', async (_evt, args: { songs: CachedSong[]; overwrite: boolean }) => {
+    return importSongs(args.songs, args.overwrite)
   })
 
   // Histórico de setlists

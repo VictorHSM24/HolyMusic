@@ -77,3 +77,63 @@ export function deleteCachedSong(song: string, author: string, language: string)
   delete db.songs[key(song, author, language)]
   saveDB(db)
 }
+
+// Exporta todo o banco como array de CachedSong (para salvar em arquivo)
+export function exportAllSongs(): CachedSong[] {
+  return listCachedSongs()
+}
+
+// Importa músicas de um array (merge: sobrescreve se a chave já existe,
+// preserva se a versão importada for mais antiga)
+export function importSongs(songs: CachedSong[], overwrite: boolean = false): {
+  added: number
+  updated: number
+  skipped: number
+} {
+  const db = loadDB()
+  let added = 0
+  let updated = 0
+  let skipped = 0
+
+  for (const song of songs) {
+    if (!song.song || !song.author || !song.slides) {
+      skipped++
+      continue
+    }
+    const k = key(song.song, song.author, song.language || 'pt-BR')
+    const existing = db.songs[k]
+
+    if (!existing) {
+      db.songs[k] = {
+        ...song,
+        language: song.language || 'pt-BR',
+        updatedAt: song.updatedAt || new Date().toISOString()
+      }
+      added++
+    } else if (overwrite) {
+      db.songs[k] = {
+        ...song,
+        language: song.language || 'pt-BR',
+        updatedAt: song.updatedAt || new Date().toISOString()
+      }
+      updated++
+    } else {
+      // Sem overwrite: só atualiza se a versão importada for mais recente
+      const importedDate = new Date(song.updatedAt || 0).getTime()
+      const existingDate = new Date(existing.updatedAt || 0).getTime()
+      if (importedDate > existingDate) {
+        db.songs[k] = {
+          ...song,
+          language: song.language || 'pt-BR',
+          updatedAt: song.updatedAt || new Date().toISOString()
+        }
+        updated++
+      } else {
+        skipped++
+      }
+    }
+  }
+
+  saveDB(db)
+  return { added, updated, skipped }
+}

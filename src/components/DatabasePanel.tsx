@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { CachedSong } from '../types'
 
 type Props = {
@@ -10,13 +10,65 @@ export default function DatabasePanel({ onClose, onUseSong }: Props) {
   const [songs, setSongs] = useState<CachedSong[]>([])
   const [filter, setFilter] = useState('')
   const [loading, setLoading] = useState(true)
+  const [status, setStatus] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
+  const reload = () => {
     window.holy.listCachedSongs().then((s) => {
       setSongs(s)
       setLoading(false)
     })
+  }
+
+  useEffect(() => {
+    reload()
   }, [])
+
+  const handleExport = async () => {
+    try {
+      const allSongs = await window.holy.exportAllSongs()
+      const blob = new Blob([JSON.stringify(allSongs, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const date = new Date().toISOString().slice(0, 10)
+      a.download = `holymusic-banco-${date}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      setStatus(`Exportadas ${allSongs.length} música(s) para arquivo.`)
+    } catch {
+      setStatus('Erro ao exportar banco.')
+    }
+  }
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const imported = JSON.parse(text) as CachedSong[]
+      if (!Array.isArray(imported)) {
+        setStatus('Arquivo inválido: esperado um array de músicas.')
+        return
+      }
+      const overwrite = confirm(
+        `Importar ${imported.length} música(s) do arquivo?\n\n` +
+        `Clique OK para SOBRESCREVER músicas existentes.\n` +
+        `Clique Cancelar para apenas adicionar novas (preservar existentes).`
+      )
+      const result = await window.holy.importSongs(imported, overwrite)
+      setStatus(`Importação concluída: ${result.added} nova(s), ${result.updated} atualizada(s), ${result.skipped} ignorada(s).`)
+      reload()
+    } catch {
+      setStatus('Erro ao importar arquivo. Verifique se é um JSON válido exportado pelo HolyMusic.')
+    }
+    // Reset input para permitir reimportar o mesmo arquivo
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   const filtered = songs.filter((s) => {
     const q = filter.toLowerCase()
@@ -86,8 +138,46 @@ export default function DatabasePanel({ onClose, onUseSong }: Props) {
             onChange={(e) => setFilter(e.target.value)}
             style={{ width: 200 }}
           />
+          <button
+            className="ghost"
+            onClick={handleImportClick}
+            title="Importar banco de músicas de um arquivo JSON"
+            style={{ fontSize: 12 }}
+          >
+            ⬆ Importar
+          </button>
+          <button
+            className="ghost"
+            onClick={handleExport}
+            disabled={songs.length === 0}
+            title="Exportar todo o banco para um arquivo JSON"
+            style={{ fontSize: 12 }}
+          >
+            ⬇ Exportar
+          </button>
           <button className="ghost" onClick={onClose}>✕</button>
         </div>
+
+        {/* Input hidden para importar arquivo */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          onChange={handleImportFile}
+          style={{ display: 'none' }}
+        />
+
+        {/* Status da importação/exportação */}
+        {status && (
+          <div className="banner ok" style={{ margin: '8px 20px', fontSize: 12 }}>
+            {status}
+            <button
+              className="ghost"
+              style={{ marginLeft: 8, fontSize: 11, padding: '0 6px' }}
+              onClick={() => setStatus(null)}
+            >✕</button>
+          </div>
+        )}
 
         <div style={{ overflow: 'auto', padding: '8px 20px' }}>
           {loading ? (
