@@ -1,0 +1,11 @@
+Fix auto-update: mover electron-updater para dependencies + debug workflow
+
+- electron-updater movido de devDependencies para dependencies
+  (necessario para ser incluido no app empacotado pelo electron-builder)
+- Workflow: usar shell bash para electron-builder (evita issues do PowerShell)
+- Workflow: adicionar logs de debug (listar dist/, mostrar latest.yml)
+- Bump v0.3.1
+
+Generated with [Devin](https://devin.ai)
+
+Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
