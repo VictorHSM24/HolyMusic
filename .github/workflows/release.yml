@@ -28,16 +28,30 @@ jobs:
       - name: Build app
         run: npm run build
 
-      - name: Build & publish to GitHub Releases
+      - name: Build installer (NSIS + portable)
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npx electron-builder --win nsis portable
+
+      - name: List built files
+        shell: bash
+        run: |
+          ls -la dist/*.exe dist/*.yml 2>/dev/null || echo "No files found"
+          echo "---"
+          cat dist/latest.yml 2>/dev/null || echo "No latest.yml"
+
+      - name: Create GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
         run: |
-          echo "Building and publishing..."
-          npx electron-builder --win nsis portable --publish always
-          echo "Exit code: $?"
-          echo "---"
-          ls -la dist/ || true
-          echo "---"
-          cat dist/latest.yml 2>/dev/null || echo "No latest.yml found"
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "Creating release for tag: $TAG"
+          gh release create "$TAG" \
+            --title "HolyMusic $TAG" \
+            --generate-notes \
+            dist/HolyMusic-*-x64.exe \
+            dist/HolyMusic-*-x64-portable.exe \
+            dist/latest.yml \
+            2>&1 || echo "gh release create failed (may already exist)"
