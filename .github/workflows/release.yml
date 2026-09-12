@@ -23,7 +23,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Build app
         run: npm run build
@@ -32,14 +32,15 @@ jobs:
         shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npx electron-builder --win nsis portable
-
-      - name: List built files
-        shell: bash
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ls -la dist/*.exe dist/*.yml 2>/dev/null || echo "No files found"
-          echo "---"
-          cat dist/latest.yml 2>/dev/null || echo "No latest.yml"
+          echo "=== Building NSIS + portable ==="
+          npx electron-builder --win nsis portable
+          echo "=== Exit code: $? ==="
+          echo "=== dist/ contents ==="
+          ls -la dist/ || true
+          echo "=== latest.yml ==="
+          cat dist/latest.yml 2>/dev/null || echo "No latest.yml found"
 
       - name: Create GitHub Release
         shell: bash
@@ -48,10 +49,9 @@ jobs:
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           echo "Creating release for tag: $TAG"
+          # Upload all exe files and latest.yml
           gh release create "$TAG" \
             --title "HolyMusic $TAG" \
             --generate-notes \
-            dist/HolyMusic-*-x64.exe \
-            dist/HolyMusic-*-x64-portable.exe \
-            dist/latest.yml \
-            2>&1 || echo "gh release create failed (may already exist)"
+            dist/*.exe dist/latest.yml 2>&1
+          echo "gh release exit code: $?"

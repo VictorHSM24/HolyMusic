@@ -1,0 +1,11 @@
+Fix release workflow: npm install + logs + package-lock sync
+
+- package-lock.json sincronizado apos mover electron-updater para dependencies
+- Workflow: npm install em vez de npm ci (mais tolerante a mudancas)
+- Workflow: logs detalhados do electron-builder e dist/
+- Workflow: gh release create com glob dist/*.exe
+- Bump v0.3.3
+
+Generated with [Devin](https://devin.ai)
+
+Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
