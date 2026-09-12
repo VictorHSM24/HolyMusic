@@ -21,7 +21,7 @@ export function registerIpc(): void {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       throw new Error(
-        `Não foi possível conectar ao Ollama em http://localhost:11434. Verifique se o Ollama está rodando. Detalhe: ${msg}`
+        `Não foi possível conectar ao Ollama em http://127.0.0.1:11434. Verifique se o Ollama está rodando. Detalhe: ${msg}`
       )
     }
   })
